@@ -22,15 +22,15 @@ class MoneyAgent(mesa.Agent):
 
     def __init__(self, unique_id, model):
         # Pass the parameters to the parent class.
-        super().__init__(unique_id, model)
-
+        super().__init__(model)
+        self.unique_id = unique_id    # <= set it explicitly
         # Create the agent's variable and set the initial values.
         self.wealth = 1
 
     def step(self):
         # Verify agent has some wealth
         if self.wealth > 0:
-            other_agent = self.random.choice(self.model.agents)
+            other_agent = self.random.choice(self.model.money_agents)
             if other_agent is not None:
                 other_agent.wealth += 1
                 self.wealth -= 1
@@ -42,12 +42,12 @@ class MoneyModel(mesa.Model):
     def __init__(self, N):
         super().__init__()
         self.num_agents = N
-        self.agents = [MoneyAgent(i, self) for i in range(self.num_agents)]
+        self.money_agents = [MoneyAgent(i, self) for i in range(self.num_agents)]
 
     def step(self):
         """Advance the model by one step."""
-        self.random.shuffle(self.agents)
-        for agent in self.agents:
+        self.random.shuffle(self.money_agents)
+        for agent in self.money_agents:
             agent.step()
 
     def run_model(self, n_steps) -> None:
@@ -84,9 +84,11 @@ class MoneyAgentPolarsConcise(AgentSetPolars):
             )
         )"""
         # 3. Adding the dataframe with __iadd__
-        self += pl.DataFrame(
-            {"unique_id": pl.arange(n, eager=True), "wealth": pl.ones(n, eager=True)}
-        )
+        # self += pl.DataFrame(
+        #     {"unique_id": pl.arange(n, eager=True), "wealth": pl.ones(n, eager=True)}
+        # )
+        df = pl.DataFrame({"wealth": pl.ones(n, eager=True)})
+        self.add(df)  # constructor now uses .add without unique_id
 
     def step(self) -> None:
         # The give_money method is called
@@ -127,9 +129,11 @@ class MoneyAgentPolarsConcise(AgentSetPolars):
 class MoneyAgentPolarsNative(AgentSetPolars):
     def __init__(self, n: int, model: ModelDF):
         super().__init__(model)
-        self += pl.DataFrame(
-            {"unique_id": pl.arange(n, eager=True), "wealth": pl.ones(n, eager=True)}
-        )
+        # self += pl.DataFrame(
+        #     {"unique_id": pl.arange(n, eager=True), "wealth": pl.ones(n, eager=True)}
+        # )
+        df = pl.DataFrame({"wealth": pl.ones(n, eager=True)})
+        self.add(df) 
 
     def step(self) -> None:
         self.do("give_money")
@@ -161,12 +165,15 @@ class MoneyAgentPolarsNative(AgentSetPolars):
 class MoneyModelDF(ModelDF):
     def __init__(self, N: int, agents_cls):
         super().__init__()
+        # self.n_agents = N
+        # self.money_agents += agents_cls(N, self)
         self.n_agents = N
-        self.agents += agents_cls(N, self)
+        self.money_agents = agents_cls(N, self)  # constructor now uses .add without unique_id
+        self.agents += self.money_agents         # register this set with the model
 
     def step(self):
         # Executes the step method for every agentset in self.agents
-        self.agents.do("step")
+        self.money_agents.do("step")
 
     def run_model(self, n):
         for _ in range(n):
